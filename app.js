@@ -2,7 +2,7 @@
 
 /* ============ 常數 ============ */
 const MAX_BOOKS = 400;
-const APP_VERSION = 'v1.0';
+const APP_VERSION = 'v2.0';
 
 const COLLECTIONS = [
   '兒童繪本-中文',
@@ -38,6 +38,155 @@ const COLS = [15.71, 16, 22.36, 30.36, 29.36, 16.07, 31.86, 33.36, 21.21, 33.36,
 
 const DB_NAME = 'kinder-library';
 const DB_VER = 1;
+
+/* ============ 設定 / 額度 ============ */
+const SETTINGS_KEY = 'lib.settings.v2';
+const USAGE_KEY = 'lib.usage.v2';
+const DEFAULT_SETTINGS = {
+  provider: 'vision',
+  limit: 950,
+  keys: { vision: '', ocrspace: '' },
+  ai: { url: 'https://openrouter.ai/api/v1', key: '', model: '' },
+};
+const PROVIDERS = {
+  vision: { label: 'Google Cloud Vision', limit: 950, period: 'month' },
+  ocrspace: { label: 'OCR.space', limit: 500, period: 'day' },
+};
+
+let settings = loadSettings();
+
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+    return {
+      ...DEFAULT_SETTINGS,
+      ...s,
+      limit: Math.max(50, Math.min(950, Number(s.limit) || DEFAULT_SETTINGS.limit)),
+      keys: { ...DEFAULT_SETTINGS.keys, ...(s.keys || {}) },
+      ai: { ...DEFAULT_SETTINGS.ai, ...(s.ai || {}) },
+    };
+  } catch (e) {
+    return {
+      provider: DEFAULT_SETTINGS.provider,
+      limit: DEFAULT_SETTINGS.limit,
+      keys: { ...DEFAULT_SETTINGS.keys },
+      ai: { ...DEFAULT_SETTINGS.ai },
+    };
+  }
+}
+
+function saveSettings() {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) { /* ignore */ }
+}
+
+function currentProvider() {
+  return settings.provider === 'ocrspace' ? 'ocrspace' : 'vision';
+}
+
+function currentKey() {
+  return String(settings.keys[currentProvider()] || '').trim();
+}
+
+function periodKey(kind) {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return kind === 'day'
+    ? `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+    : `${d.getFullYear()}-${p(d.getMonth() + 1)}`;
+}
+
+function loadUsageAll() {
+  try { return JSON.parse(localStorage.getItem(USAGE_KEY) || '{}'); } catch (e) { return {}; }
+}
+
+function getUsage() {
+  const prov = currentProvider();
+  const def = PROVIDERS[prov];
+  const pk = periodKey(def.period);
+  const all = loadUsageAll();
+  const u = all[prov];
+  if (!u || u.period !== pk) return { period: pk, count: 0 };
+  return u;
+}
+
+function saveUsage(u) {
+  const all = loadUsageAll();
+  all[currentProvider()] = u;
+  try { localStorage.setItem(USAGE_KEY, JSON.stringify(all)); } catch (e) { /* ignore */ }
+}
+
+function limitFor() {
+  if (currentProvider() !== 'vision') return PROVIDERS.ocrspace.limit;
+  return Math.max(50, Math.min(950, Number(settings.limit) || 950));
+}
+
+function quotaLeft() {
+  return Math.max(0, limitFor() - getUsage().count);
+}
+
+function incUsage() {
+  const u = getUsage();
+  u.count += 1;
+  saveUsage(u);
+  renderUsage();
+}
+
+function usageLabel() {
+  const prov = currentProvider();
+  const def = PROVIDERS[prov];
+  const u = getUsage();
+  const when = def.period === 'day' ? '今日' : '本月';
+  return `${def.label}：${when}已用 ${u.count} / ${limitFor()}（${def.period === 'day' ? '每日' : '每月'}重置）`;
+}
+
+function renderUsage() {
+  const el1 = $('#set-usage');
+  if (el1) el1.textContent = usageLabel();
+  renderKeyNotice();
+}
+
+function renderKeyNotice() {
+  const box = $('#key-notice');
+  if (!box) return;
+  const hasKey = !!currentKey();
+  const left = quotaLeft();
+  if (hasKey && left > 0) {
+    box.classList.add('hidden');
+    return;
+  }
+  const def = PROVIDERS[currentProvider()];
+  $('#key-notice-text').textContent = hasKey
+    ? `${def.label} ${def.period === 'day' ? '今日' : '本月'}額度已用完（${limitFor()} 張），已停止辨識。`
+    : '尚未設定辨識服務，暫時不能辨識。';
+  box.classList.remove('hidden');
+}
+
+function showKeyDialog() {
+  showModal({
+    title: '需要設定辨識服務',
+    body: '<p>請先到「更多 → 辨識服務」貼上 API key（每部手機一次）。</p>',
+    actions: [
+      { label: '前往設定', kind: 'primary', onClick: () => { hideModal(); switchView('more'); } },
+      { label: '稍後', kind: 'ghost' },
+    ],
+  });
+}
+
+function showQuotaDialog() {
+  const prov = currentProvider();
+  const def = PROVIDERS[prov];
+  const when = def.period === 'day' ? '今日' : '本月';
+  const reset = def.period === 'day' ? '明日' : '下月 1 日';
+  showModal({
+    title: `${when}辨識額度已用完`,
+    body: `<p>${def.label} 已達 <strong>${limitFor()} 張</strong>上限，為確保不會產生額外費用，已停止雲端辨識。</p>` +
+      `<p>額度會在${reset}自動重置。已儲存的相片仍會保留，屆時可在卡片內按「重新辨識」。</p>`,
+    actions: [
+      { label: '去匯出 Excel', kind: 'primary', onClick: () => { hideModal(); switchView('more'); } },
+      { label: '知道了', kind: 'ghost' },
+    ],
+  });
+}
 
 /* ============ 小工具 ============ */
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -233,6 +382,9 @@ async function addFiles(fileList) {
   const files = Array.from(fileList || []).filter((f) => f && f.type.startsWith('image/'));
   if (!files.length) return;
 
+  if (!currentKey()) { showKeyDialog(); return; }
+  if (quotaLeft() <= 0) { showQuotaDialog(); return; }
+
   const used = state.books.length + state.queue.filter((q) => q.state !== 'error').length;
   let room = MAX_BOOKS - used;
 
@@ -277,6 +429,18 @@ async function processQueue() {
   }
 }
 
+function ocrErrorMessage(err) {
+  const msg = String((err && err.message) || '');
+  const st = err && err.status;
+  if (st === 401 || st === 403 || /API key|invalid|permission|unauthor|not authorized/i.test(msg)) {
+    return 'API key 無效或未啟用 API';
+  }
+  if (/billing|disabled|has not been used/i.test(msg)) return 'API 未啟用或帳單未設定';
+  if (st === 429 || /quota|rate limit|too many/i.test(msg)) return '雲端額度或頻率已達上限';
+  if (/逾時|timeout|abort/i.test(msg)) return '辨識逾時，請重試';
+  return '辨識失敗：' + (msg.slice(0, 70) || '未知錯誤');
+}
+
 async function runJob(job) {
   job.state = 'working';
   job.progress = 0;
@@ -290,6 +454,22 @@ async function runJob(job) {
       job.message = '儲存量已滿，未加入';
       renderQueue();
       fullDialog();
+      return;
+    }
+
+    if (!currentKey()) {
+      job.state = 'error';
+      job.message = '未設定 API key';
+      renderQueue();
+      showKeyDialog();
+      return;
+    }
+
+    if (quotaLeft() <= 0) {
+      job.state = 'error';
+      job.message = '辨識額度已用完';
+      renderQueue();
+      showQuotaDialog();
       return;
     }
 
@@ -312,37 +492,36 @@ async function runJob(job) {
       ocrText: '',
       ocrConfidence: 0,
       imageId,
-      version: 1,
+      version: 2,
     };
     book.id = await dbAdd('books', book);
     state.books.unshift(book);
     renderAll();
 
-    job.message = '載入辨識引擎…';
+    job.message = '上傳雲端辨識中…';
     renderQueue();
-    setEngine('busy', '辨識引擎：準備中');
+    setEngine('busy', '辨識中 | ' + job.name);
 
-    const worker = await getWorker();
-    setEngine('busy', '辨識引擎：辨識中 | ' + job.name);
+    incUsage();
+    const provider = currentProvider();
+    const result = await window.OCRCloud.recognize(provider, full, currentKey());
+    const fields = window.OCRCloud.parseFields(result.text, result.words, result.confidence);
 
-    job.message = '辨識文字中…';
-    renderQueue();
+    const aiPick = await aiClassify(fields, result.text);
+    if (aiPick) {
+      fields.collection = aiPick;
+      fields.callLetter = window.OCRCloud.suggestCallLetter(aiPick, fields.language, fields.author);
+    }
 
-    const { data } = await worker.recognize(full, {}, { text: true, blocks: true });
-    const text = (data && data.text) || '';
-    const confidence = Math.round((data && data.confidence) || 0);
-
-    const fields = extractFields(text, data && data.blocks);
-
-    book.ocrText = text;
-    book.ocrConfidence = confidence;
-    book.collection = fields.collection;
-    book.barcode = fields.barcode;
-    book.title = fields.title;
-    book.author = fields.author;
-    book.publisher = fields.publisher;
-    book.language = fields.language;
-    book.callLetter = fields.callLetter;
+    book.ocrText = result.text || '';
+    book.ocrConfidence = result.confidence || 0;
+    book.collection = fields.collection || '';
+    book.barcode = fields.barcode || '';
+    book.title = fields.title || '';
+    book.author = fields.author || '';
+    book.publisher = fields.publisher || '';
+    book.language = fields.language || '';
+    book.callLetter = fields.callLetter || '';
     book.status = 'review';
     book.updatedAt = Date.now();
     await dbPut('books', book);
@@ -352,22 +531,23 @@ async function runJob(job) {
     job.message = '已加入待校對';
   } catch (err) {
     console.error('OCR 失敗', err);
+    const msg = ocrErrorMessage(err);
     job.state = 'error';
-    job.message = '辨識失敗，可稍後重試';
+    job.message = msg;
     if (book) {
-      book.ocrText = book.ocrText || '';
       book.status = 'draft';
+      book.ocrError = msg;
       book.updatedAt = Date.now();
       try { await dbPut('books', book); } catch (e) { /* ignore */ }
     }
-    setEngine('err', '辨識引擎：發生錯誤');
-    toast('有相片辨識失敗，可在卡片內按「重新辨識」');
+    setEngine('err', '辨識發生錯誤');
+    toast(msg + '（可在卡片內按「重新辨識」）', 4200);
+    renderKeyNotice();
   } finally {
     await new Promise((r) => setTimeout(r, 350));
     renderAll();
   }
 }
-
 function setEngine(kind, text) {
   const dot = $('#engine-dot');
   dot.className = 'dot ' + (kind === 'busy' ? 'busy' : kind === 'ready' ? 'ready' : kind === 'err' ? 'err' : '');
@@ -403,304 +583,55 @@ function renderQueue() {
   });
 }
 
-/* ============ OCR 引擎 ============ */
-let workerPromise = null;
+/* ============ 雲端 OCR 呼叫 ============ */
+function normalizeIsbn(s) { return window.OCRCloud.normalizeIsbn(s); }
+function isbn13Valid(s) { return window.OCRCloud.isbn13Valid(s); }
+function isbn10Valid(s) { return window.OCRCloud.isbn10Valid(s); }
+function suggestCallLetter(c, l, a) { return window.OCRCloud.suggestCallLetter(c, l, a); }
+function detectLanguage(t, a, all) { return window.OCRCloud.detectLanguage(t, a, all); }
 
-function getWorker() {
-  if (!workerPromise) {
-    workerPromise = (async () => {
-      if (typeof Tesseract === 'undefined') throw new Error('OCR 引擎未載入');
-      const abs = (p) => new URL(p, location.href).href;
-      setEngine('busy', '辨識引擎：首次載入語言資料…');
-      const worker = await Tesseract.createWorker('chi_tra+eng', 1, {
-        workerPath: abs('./vendor/worker.min.js'),
-        corePath: abs('./vendor'),
-        langPath: abs('./vendor/lang'),
-        logger: (m) => {
-          if (m && m.status === 'recognizing text') {
-            const cur = state.queue.find((q) => q.state === 'working');
-            if (cur) {
-              cur.progress = Math.round((m.progress || 0) * 100);
-              cur.message = `辨識文字中… ${cur.progress}%`;
-              const first = $('#queue').querySelector('.qitem .bar > i');
-              if (first) first.style.width = cur.progress + '%';
-              const st = $('#queue').querySelector('.qitem .q-state');
-              if (st) st.textContent = cur.message;
-            }
-          }
-        },
-        errorHandler: (e) => console.error('tesseract', e),
-      });
-      await worker.setParameters({ preserve_interword_spaces: '1' });
-      setEngine('ready', '辨識引擎：就緒');
-      return worker;
-    })().catch((e) => {
-      workerPromise = null;
-      setEngine('err', '辨識引擎：載入失敗');
-      throw e;
+async function aiClassify(fields, text) {
+  const ai = settings.ai || {};
+  if (!ai.url || !ai.key || !ai.model) return '';
+  const cats = window.OCRCloud.COLLECTIONS.join('、');
+  const prompt = [
+    '你是幼稚園圖書館的分類助手。根據版權頁資料，從下列類別選出最合適的一個：',
+    cats,
+    '規則：宗教書優先「宗教圖書」；教師用書／教學法優先「教師參考書」；其他中文繪本用「兒童繪本-中文」，英文繪本用「兒童繪本-英文」；知識類用「生活資訊-…」。',
+    '只輸出 JSON：{"collection":"類別"}',
+    '書名：' + (fields.title || ''),
+    '作者：' + (fields.author || ''),
+    '出版社：' + (fields.publisher || ''),
+    '文字：' + String(text || '').slice(0, 1500),
+  ].join('\n');
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const res = await fetch(ai.url.replace(/\/+$/, '') + '/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + ai.key },
+      body: JSON.stringify({
+        model: ai.model,
+        temperature: 0,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+      }),
+      signal: ctrl.signal,
     });
+    if (!res.ok) return '';
+    const data = await res.json();
+    const content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+    const m = String(content || '').match(/\{[\s\S]*\}/);
+    if (!m) return '';
+    const obj = JSON.parse(m[0]);
+    return window.OCRCloud.COLLECTIONS.indexOf(obj.collection) >= 0 ? obj.collection : '';
+  } catch (e) {
+    return '';
+  } finally {
+    clearTimeout(timer);
   }
-  return workerPromise;
 }
-
-/* ============ 文字抽取 ============ */
-const BAD_TITLE = /作者|作\s*者|譯者|譯\s*者|繪者|繪\s*者|編者|編\s*者|編輯|編\s*輯|攝影|美術|封面|出版|發行|印刷|經銷|ISBN|定價|售價|價錢|版次|初版|地址|電話|傳真|網址|電郵|版權|著作|書名|國家圖書館|CIP/;
-
-function tidy(s) {
-  return (s || '')
-    .replace(/[\u3000]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .replace(/\s+([!?！？，,。.；;：:])/g, '$1')
-    .replace(/^[·•・\-\s]+/, '')
-    .replace(/[\s.。;；:：,，]+$/, '')
-    .trim();
-}
-
-function normalizeIsbn(raw) {
-  return (raw || '').replace(/[^0-9Xx]/g, '').toUpperCase();
-}
-
-function isbn13Valid(s) {
-  if (!/^\d{13}$/.test(s)) return false;
-  let sum = 0;
-  for (let i = 0; i < 12; i++) sum += Number(s[i]) * (i % 2 ? 3 : 1);
-  return (10 - (sum % 10)) % 10 === Number(s[12]);
-}
-
-function isbn10Valid(s) {
-  if (!/^\d{9}[\dX]$/.test(s)) return false;
-  let sum = 0;
-  for (let i = 0; i < 9; i++) sum += Number(s[i]) * (10 - i);
-  const c = s[9] === 'X' ? 10 : Number(s[9]);
-  return (11 - (sum % 11)) % 11 === c;
-}
-
-function extractIsbn(text) {
-  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
-  const tries = [];
-
-  lines.forEach((line, i) => {
-    if (/I\s*S\s*B\s*N/i.test(line)) {
-      const idx = line.search(/I\s*S\s*B\s*N/i);
-      tries.push(line.slice(idx));
-      if (lines[i + 1]) tries.push(lines[i + 1]);
-      tries.push(line.replace(/^.*?I\s*S\s*B\s*N[^0-9]*/i, ''));
-    }
-  });
-  tries.push(text);
-
-  for (const chunk of tries) {
-    const cands = (chunk.match(/(?:97[89][\d\-\s]{9,17}[\dXx]|[\d\-\s]{10,17}[\dXx]|\d{8,13})/g) || []);
-    for (const raw of cands) {
-      const s = normalizeIsbn(raw);
-      if (isbn13Valid(s) || isbn10Valid(s)) return s;
-    }
-  }
-  // 未通過檢查碼：退回「ISBN 附近」最像的一組
-  for (const chunk of tries) {
-    const m = normalizeIsbn(chunk);
-    if (m.length >= 8 && m.length <= 17) {
-      const near = chunk.match(/(\d[\d\-\s]{7,16}\d)/);
-      if (near) {
-        const s = normalizeIsbn(near[1]);
-        if (s.length === 10 || s.length === 13 || s.length === 8) return s;
-      }
-    }
-  }
-  return '';
-}
-
-function titleFromBlocks(blocks) {
-  if (!Array.isArray(blocks) || !blocks.length) return '';
-  const lines = [];
-  blocks.forEach((b) => {
-    (b.paragraphs || []).forEach((p) => {
-      (p.lines || []).forEach((l) => {
-        const t = tidy(l.text);
-        const bb = l.bbox;
-        if (!t || !bb) return;
-        const h = bb.y1 - bb.y0;
-        if (h <= 0) return;
-        if (t.replace(/\s/g, '').length < 2) return;
-        lines.push({ t, h, x: bb.x0, y: bb.y0 });
-      });
-    });
-  });
-  if (!lines.length) return '';
-
-  const maxH = Math.max.apply(null, lines.map((l) => l.h));
-  const top = lines
-    .filter((l) => l.h >= maxH * 0.8 && l.t.length <= 30 && /[\u4e00-\u9fffA-Za-z]/.test(l.t))
-    .sort((a, b) => a.y - b.y || a.x - b.x);
-  if (!top.length) return '';
-
-  const startY = top[0].y;
-  const picked = [];
-  for (const l of top) {
-    if (l.y - startY > maxH * 3.2) break;
-    if (BAD_TITLE.test(l.t)) break;
-    if (l.t.replace(/\s/g, '').length <= 1) continue;
-    picked.push(l.t);
-    if (picked.join('').length > 34) break;
-  }
-  return tidy(picked.join(''));
-}
-
-function extractTitle(text, blocks) {
-  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
-
-  // 1) CIP 型式：書名 / 作者
-  for (const line of lines) {
-    const m = line.match(/^(.{2,40}?)\s*[\/／]\s*(.{2,90})$/);
-    if (m) {
-      const left = tidy(m[1]);
-      if (/[\u4e00-\u9fff]/.test(left) && !BAD_TITLE.test(left) && left.length <= 30) return left;
-    }
-  }
-
-  // 2) 標籤型式：書名：…
-  for (const line of lines) {
-    const m = line.match(/^書\s*名\s*[：:]\s*(.+)$/);
-    if (m) return tidy(m[1]);
-  }
-
-  // 3) 版面字型：最大字的一組
-  const byLayout = titleFromBlocks(blocks);
-  if (byLayout) return byLayout;
-
-  // 4) 第一個像書名的短句
-  for (const line of lines.slice(0, 12)) {
-    const t = tidy(line);
-    if (t.length < 2 || t.length > 26) continue;
-    if (BAD_TITLE.test(t)) continue;
-    if (/^[\d\s\-–—.]+$/.test(t)) continue;
-    if (/^[A-Za-z\s]+$/.test(t) && t.length < 4) continue;
-    return t;
-  }
-  return '';
-}
-
-function tidyAuthor(s) {
-  return tidy(
-    (s || '')
-      .replace(/\([^)]*\)/g, '')
-      .replace(/（[^）]*）/g, '')
-      .replace(/(著|文|作|撰文|原著|編著|編寫|翻譯)\s*$/g, '')
-      .replace(/([\u4e00-\u9fff])[.·•・](?=[\u4e00-\u9fff])/g, '$1·')
-  );
-}
-
-function extractAuthor(text) {
-  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
-
-  for (const line of lines) {
-    if (/譯\s*者|繪\s*者|編\s*者|編\s*輯|攝\s*影|美\s*術|封\s*面|總\s*編|責\s*任/.test(line)) continue;
-    const m = line.match(/^(?:作\s*者|Author|文|撰文|原著)\s*[：:]?\s*(.{2,60})$/i);
-    if (m) {
-      const a = tidyAuthor(m[1]);
-      if (a) return a;
-    }
-  }
-
-  // 「蘿拉·艾倫·安德森 文」這類無標籤寫法
-  for (const line of lines) {
-    if (/譯|繪|編|攝影|美術|封面|出版|發行/.test(line)) continue;
-    const m = line.match(/^([\u4e00-\u9fff·•・.\sA-Za-z]{2,28})\s*(?:文|著|作|撰文)$/);
-    if (m) {
-      const a = tidyAuthor(m[1]);
-      if (a && a.replace(/\s/g, '').length >= 2) return a;
-    }
-  }
-
-  for (const line of lines) {
-    if (/譯\s*者|繪\s*者|編\s*者/.test(line)) continue;
-    const m = line.match(/[\/／]\s*([^；;\/／]{2,50})/);
-    if (m && /[\u4e00-\u9fffA-Za-z]/.test(m[1])) {
-      const a = tidyAuthor(m[1]);
-      if (a && a.replace(/\s/g, '').length >= 2) return a;
-    }
-  }
-  return '';
-}
-
-function extractPublisher(text) {
-  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
-
-  for (const line of lines) {
-    if (/出版\s*(日期|年|月份|時間)/.test(line)) continue;
-    const m = line.match(/^(?:出\s*版\s*者|出\s*版|發\s*行\s*者|經\s*銷\s*商|Published\s*by)\s*[：:]?\s*(.{2,60})$/i);
-    if (m) {
-      const p = tidy(m[1].replace(/^[（(]?香港[）)]?\s*/, ''));
-      if (p && !/^(日期|年)/.test(p)) return p;
-    }
-  }
-
-  for (const line of lines) {
-    if (/ISBN|版權|地址|電話|傳真|電郵|網址|定價|印刷/.test(line)) continue;
-    if (/(出版股份|出版集團|出版事業|出版有限公司|出版公司|出版社|書局|圖書公司|文化事業|Publishing|Press|Publisher)/i.test(line)) {
-      const p = tidy(
-        line
-          .replace(/^(出\s*版|出\s*版\s*者|總\s*經\s*銷|經\s*銷\s*商)\s*[：:]?\s*/, '')
-          .replace(/[,，]\s*\d{4}.*$/, '')
-      );
-      if (p.length >= 2 && p.length <= 40) return p;
-    }
-  }
-  return '';
-}
-
-function detectLanguage(title, author, allText) {
-  const sample = `${title || ''} ${author || ''}`;
-  const cjk = (sample.match(/[\u4e00-\u9fff]/g) || []).length;
-  const lat = (sample.match(/[A-Za-z]/g) || []).length;
-  if (cjk > 0 && lat > 0) return 'bi';
-  if (cjk > 0) return 'zh';
-  if (lat >= 2) return 'en';
-
-  const cjkAll = (allText.match(/[\u4e00-\u9fff]/g) || []).length;
-  const latAll = (allText.match(/[A-Za-z]/g) || []).length;
-  if (cjkAll > latAll) return 'zh';
-  if (latAll > cjkAll * 2) return 'en';
-  return 'zh';
-}
-
-function suggestCollection(text, language) {
-  const t = text || '';
-  if (/(聖經|宗教|耶穌|基督|天主|佛|禪|禱告|祈禱|靈修|福音|信徒|教會|牧師|神學)/.test(t)) return '宗教圖書';
-  if (/(教師|教學|課程|教案|教材|指南|手冊|理論|參考|評估|活動設計)/.test(t)) return '教師參考書';
-  if (/(生命科學|生物|動物|植物|昆蟲|人體|生態)/.test(t)) return '生活資訊-生命科學';
-  if (/(物理|力學|光學|聲音|電學|能量|機械)/.test(t)) return '生活資訊-物理科學';
-  if (/(地球|太空|宇宙|星球|天文|氣象|海洋|地質)/.test(t)) return '生活資訊-地球和太空科學';
-  if (/(藝術|美術|音樂|繪畫|手工|勞作|舞蹈|戲劇)/.test(t)) return '生活資訊-藝術';
-  if (/(烹飪|食譜|料理|烘焙|食物|飲食)/.test(t)) return '生活資訊-烹飪';
-  if (/(文化|節日|習俗|歷史|地理|世界|國家)/.test(t)) return '生活資訊-文化';
-  if (language === 'en') return '兒童繪本-英文';
-  return '兒童繪本-中文';
-}
-
-function suggestCallLetter(collection, language, author) {
-  if (collection === '宗教圖書') return 'R';
-  if (collection === '教師參考書') return 'I';
-  if (language === 'zh') return 'C';
-  if (language === 'en') return 'E';
-  const a = author || '';
-  if (/[\u4e00-\u9fff]/.test(a)) return 'C';
-  if (/[A-Za-z]/.test(a)) return 'E';
-  return 'C';
-}
-
-function extractFields(text, blocks) {
-  const clean = (text || '').replace(/\r/g, '');
-  const title = extractTitle(clean, blocks);
-  const author = extractAuthor(clean);
-  const publisher = extractPublisher(clean);
-  const barcode = extractIsbn(clean);
-  const language = detectLanguage(title, author, clean);
-  const collection = suggestCollection(`${title}\n${clean.slice(0, 1200)}`, language);
-  const callLetter = suggestCallLetter(collection, language, author);
-  return { title, author, publisher, barcode, language, collection, callLetter };
-}
-
 /* ============ 畫面：清單 ============ */
 async function thumbSrc(imageId) {
   if (!imageId) return '';
@@ -829,6 +760,7 @@ function switchView(name) {
   window.scrollTo(0, 0);
   if (name === 'more') {
     renderStorageSize();
+    fillSettingsUI();
     const last = localStorage.getItem('lastExport');
     $('#last-export').textContent = last ? `上次匯出：${last}` : '尚未匯出';
   }
@@ -1052,24 +984,34 @@ async function reOcr() {
 }
 
 async function runReOcr(b) {
+  if (!currentKey()) { showKeyDialog(); return; }
+  if (quotaLeft() <= 0) { showQuotaDialog(); return; }
+
   const rec = await dbGet('images', b.imageId);
   if (!rec) { toast('找不到相片'); return; }
   toast('重新辨識中，請稍候…', 5000);
-  setEngine('busy', '辨識引擎：重新辨識');
+  setEngine('busy', '重新辨識中');
   try {
-    const worker = await getWorker();
-    const { data } = await worker.recognize(rec.blob, {}, { text: true, blocks: true });
-    const f = extractFields(data && data.text, data && data.blocks);
-    b.ocrText = (data && data.text) || b.ocrText;
-    b.ocrConfidence = Math.round((data && data.confidence) || 0);
+    incUsage();
+    const result = await window.OCRCloud.recognize(currentProvider(), rec.blob, currentKey());
+    const f = window.OCRCloud.parseFields(result.text, result.words, result.confidence);
+    const aiPick = await aiClassify(f, result.text);
+    if (aiPick) {
+      f.collection = aiPick;
+      f.callLetter = window.OCRCloud.suggestCallLetter(aiPick, f.language, f.author);
+    }
+
+    b.ocrText = (result.text || b.ocrText || '').trim();
+    b.ocrConfidence = result.confidence || 0;
     b.title = f.title || b.title;
     b.author = f.author || b.author;
     b.publisher = f.publisher || b.publisher;
     b.barcode = f.barcode || b.barcode;
-    b.language = f.language;
-    b.collection = f.collection;
-    b.callLetter = f.callLetter;
-    b.status = b.status === 'confirmed' ? 'review' : b.status;
+    b.language = f.language || b.language;
+    b.collection = f.collection || b.collection;
+    b.callLetter = f.callLetter || b.callLetter;
+    b.ocrError = '';
+    b.status = b.status === 'confirmed' ? 'review' : (b.status === 'draft' ? 'review' : b.status);
     b.updatedAt = Date.now();
     await dbPut('books', b);
 
@@ -1087,12 +1029,12 @@ async function runReOcr(b) {
     toast('辨識完成');
   } catch (e) {
     console.error(e);
-    toast('辨識失敗，請稍後再試');
+    toast(ocrErrorMessage(e), 4200);
+    renderKeyNotice();
   } finally {
     setEngine('ready', '辨識引擎：就緒');
   }
 }
-
 /* ============ 刪除 / 清除 ============ */
 async function deleteBookFlow() {
   const b = state.editing;
@@ -1244,16 +1186,149 @@ async function exportExcel() {
 }
 
 /* ============ 事件 ============ */
+/* ============ 設定畫面 ============ */
+function fillSettingsUI() {
+  const prov = currentProvider();
+  $('#set-provider').value = prov;
+  $('#set-key').value = settings.keys[prov] || '';
+  $('#set-limit').value = settings.limit;
+  $('#set-limit').disabled = prov !== 'vision';
+  $('#set-limit').closest('.field').classList.toggle('muted-field', prov !== 'vision');
+  $('#set-ai-url').value = (settings.ai && settings.ai.url) || '';
+  $('#set-ai-key').value = (settings.ai && settings.ai.key) || '';
+  $('#set-ai-model').value = (settings.ai && settings.ai.model) || '';
+  $('#set-ai-status').textContent = settings.ai && settings.ai.key
+    ? '已設定 AI 分類'
+    : '未設定（會用關鍵字規則分類）';
+  $('#set-status').textContent = '';
+  renderUsage();
+}
+
+function switchProvider(next) {
+  const prev = currentProvider();
+  const input = $('#set-key');
+  if (input) settings.keys[prev] = input.value.trim();
+  settings.provider = next === 'ocrspace' ? 'ocrspace' : 'vision';
+  saveSettings();
+  fillSettingsUI();
+}
+
+function saveProviderSettings() {
+  settings.keys[currentProvider()] = $('#set-key').value.trim();
+  if (currentProvider() === 'vision') {
+    settings.limit = Math.max(50, Math.min(950, Number($('#set-limit').value) || 950));
+  }
+  saveSettings();
+  const ok = !!currentKey();
+  $('#set-status').textContent = ok ? '已儲存。' : '請貼上 API key。';
+  if (ok) toast('已儲存辨識設定');
+  renderUsage();
+}
+
+async function testConnection() {
+  const key = $('#set-key').value.trim();
+  const status = $('#set-status');
+  if (!key) { status.textContent = '請先貼上 API key。'; return; }
+  if (quotaLeft() <= 0) { status.textContent = '額度已用完，暫時不能測試。'; return; }
+
+  status.textContent = '測試中…';
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 600;
+    canvas.height = 200;
+    const g = canvas.getContext('2d');
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, 600, 200);
+    g.fillStyle = '#000';
+    g.font = '48px "Microsoft JhengHei", sans-serif';
+    g.fillText('TEST 123 ABC', 40, 110);
+    const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.85));
+    incUsage();
+    const res = await window.OCRCloud.recognize(currentProvider(), blob, key);
+    const n = String(res.text || '').replace(/\s/g, '').length;
+    status.textContent = `連線成功（讀到 ${n} 個字）`;
+  } catch (e) {
+    status.textContent = ocrErrorMessage(e);
+  }
+  renderUsage();
+}
+
+function saveAiSettings() {
+  settings.ai = {
+    url: $('#set-ai-url').value.trim() || DEFAULT_SETTINGS.ai.url,
+    key: $('#set-ai-key').value.trim(),
+    model: $('#set-ai-model').value.trim(),
+  };
+  saveSettings();
+  $('#set-ai-status').textContent = settings.ai.key ? '已設定 AI 分類' : '未設定（會用關鍵字規則分類）';
+  toast('已儲存 AI 設定');
+}
+
+/* ============ 貼上文字（Lens 後備） ============ */
+function openPaste() {
+  if (!state.editing) return;
+  $('#paste-text').value = '';
+  $('#paste-modal').classList.remove('hidden');
+  setTimeout(() => $('#paste-text').focus(), 60);
+}
+
+function closePaste() {
+  $('#paste-modal').classList.add('hidden');
+}
+
+async function applyPastedText() {
+  const b = state.editing;
+  if (!b) return;
+  const text = $('#paste-text').value.trim();
+  if (text.length < 20) {
+    toast('文字太短，請貼上整頁版權頁文字');
+    return;
+  }
+
+  const f = window.OCRCloud.parseTextOnly(text);
+  b.ocrText = text;
+  b.title = f.title || b.title;
+  b.author = f.author || b.author;
+  b.publisher = f.publisher || b.publisher;
+  b.barcode = f.barcode || b.barcode;
+  b.language = f.language || b.language;
+  b.collection = f.collection || b.collection;
+  b.callLetter = f.callLetter || b.callLetter;
+  b.status = b.status === 'draft' ? 'review' : b.status;
+  b.updatedAt = Date.now();
+  await dbPut('books', b);
+
+  $('#ed-barcode').value = b.barcode || '';
+  $('#ed-title').value = b.title || '';
+  $('#ed-author').value = b.author || '';
+  $('#ed-publisher').value = b.publisher || '';
+  $('#ed-collection').value = b.collection || '';
+  $('#ed-call').value = b.callLetter || '';
+  $('#ed-ocr').textContent = b.ocrText || '';
+  updateIsbnHint();
+  updateDupWarning();
+  updateStatusButtons();
+  updateCallHint();
+  updateMeta();
+  renderAll();
+  closePaste();
+  toast('已按貼上文字更新欄位');
+}
+
 function bindEvents() {
   $$('.tab').forEach((t) => t.addEventListener('click', () => switchView(t.dataset.view)));
 
   $('#btn-camera').addEventListener('click', () => {
     if (capacityFull()) { fullDialog(); return; }
+    if (!currentKey()) { showKeyDialog(); return; }
+    if (quotaLeft() <= 0) { showQuotaDialog(); return; }
     $('#file-camera').value = '';
     $('#file-camera').click();
   });
   $('#btn-gallery').addEventListener('click', () => {
     if (capacityFull()) { fullDialog(); return; }
+    if (!currentKey()) { showKeyDialog(); return; }
+    if (quotaLeft() <= 0) { showQuotaDialog(); return; }
     $('#file-gallery').value = '';
     $('#file-gallery').click();
   });
@@ -1329,6 +1404,14 @@ function bindEvents() {
     });
   });
 
+  $('#notice-settings').addEventListener('click', () => switchView('more'));
+  $('#set-provider').addEventListener('change', (e) => switchProvider(e.target.value));
+  $('#set-save').addEventListener('click', saveProviderSettings);
+  $('#set-test').addEventListener('click', testConnection);
+  $('#set-ai-save').addEventListener('click', saveAiSettings);
+  $('#ed-paste').addEventListener('click', openPaste);
+  $('#paste-cancel').addEventListener('click', closePaste);
+  $('#paste-run').addEventListener('click', applyPastedText);
   window.addEventListener('beforeunload', () => { flushSave(); });
 
   document.addEventListener('visibilitychange', () => {
@@ -1363,6 +1446,8 @@ async function init() {
   }
 
   renderAll();
+  fillSettingsUI();
+  renderKeyNotice();
   renderQueue();
   $('#version').textContent = `${APP_VERSION} · 本機儲存 400 條上限`;
 

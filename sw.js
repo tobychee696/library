@@ -1,22 +1,16 @@
-const CACHE = 'kinderlib-v1';
+const CACHE = 'kinderlib-v2';
 
 const ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.js',
+  './ocr.js',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './vendor/tesseract.min.js',
-  './vendor/worker.min.js',
   './vendor/xlsx.full.min.js',
-  './vendor/tesseract-core-simd-lstm.wasm.js',
-  './vendor/tesseract-core-simd-lstm.wasm',
-  './vendor/tesseract-core-lstm.wasm.js',
-  './vendor/tesseract-core-lstm.wasm',
-  './vendor/lang/chi_tra.traineddata.gz',
-  './vendor/lang/eng.traineddata.gz',
+
 ];
 
 self.addEventListener('install', (event) => {
