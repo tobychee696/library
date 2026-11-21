@@ -70,17 +70,17 @@
       <h2>待校對 <span class="pill" id="review-count">0</span></h2>
       <button class="btn small ghost" id="btn-confirm-all-hint">如何確認</button>
     </div>
-    <p class="muted small">點卡片核對文字與分類；五項必填齊全後設為「已確認」。</p>
+    <p class="muted small">點卡片核對文字與分類；五項必填齊全後設為「已核對」。</p>
     <div id="review-list" class="book-list"></div>
   </section>
 
-  <!-- 已確認 -->
+  <!-- 已核對 -->
   <section id="view-confirmed" class="view hidden">
     <div class="list-head">
-      <h2>已確認 <span class="pill ok" id="confirmed-count">0</span></h2>
+      <h2>已核對 <span class="pill ok" id="confirmed-count">0</span></h2>
       <button class="btn small" id="btn-export-top">匯出 Excel</button>
     </div>
-    <p class="muted small">只有「已確認」的資料會寫入 Excel。</p>
+    <p class="muted small">只有「已核對」的資料會寫入 Excel。</p>
     <div id="confirmed-list" class="book-list"></div>
   </section>
 
@@ -172,7 +172,7 @@
         <li>先到「辨識服務」貼上 API key（每部手機一次）。</li>
         <li>拍攝或選取版權頁，系統會上傳到雲端辨識。</li>
         <li>逐本核對：館藏分類、條碼（ISBN）、書名、文字作者、出版社、索書號。</li>
-        <li>按「已確認」。全部完成後匯出 Excel。</li>
+        <li>按「已核對」。全部完成後匯出 Excel。</li>
         <li>儲存滿 400 條或當月辨識額度用完，會停止新增／辨識；先匯出，再按指示處理。</li>
       </ol>
       <p class="muted small">相片會上傳到所選的雲端辨識服務（Google／OCR.space），不會存到本工具以外的伺服器。沒有網絡時不能辨識，但仍可查看及編輯已存資料。</p>
@@ -194,7 +194,7 @@
   </button>
   <button class="tab" data-view="confirmed">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-1 14.4-3.9-3.9 1.5-1.5 2.4 2.4 5.4-5.4 1.5 1.5-6.9 6.9z"/></svg>
-    已確認
+    已核對
   </button>
   <button class="tab" data-view="more">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z"/></svg>
@@ -219,12 +219,6 @@
     <div class="spacer-sm"></div>
     <button class="btn small ghost block" id="ed-paste">貼上文字（Lens／選取文字）</button>
     <div class="spacer-sm"></div>
-
-    <div class="status-row" id="ed-status-row">
-      <button class="status-btn" data-status="draft">草稿</button>
-      <button class="status-btn" data-status="review">待校對</button>
-      <button class="status-btn" data-status="confirmed">已確認</button>
-    </div>
 
     <label class="field">
       <span>館藏分類 <b class="req">*</b></span>
@@ -276,6 +270,12 @@
     </details>
 
     <div class="meta" id="ed-meta"></div>
+
+    <div class="status-row" id="ed-status-row">
+      <button class="status-btn" data-status="draft">草稿</button>
+      <button class="status-btn" data-status="review">待校對</button>
+      <button class="status-btn" data-status="confirmed">已核對</button>
+    </div>
 
     <button class="btn primary block" id="ed-done">完成，返回清單</button>
     <div class="spacer"></div>

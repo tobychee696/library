@@ -19,7 +19,7 @@ const COLLECTIONS = [
   '生活資訊-其他',
 ];
 
-const STATUS_LABEL = { draft: '草稿', review: '待校對', confirmed: '已確認' };
+const STATUS_LABEL = { draft: '草稿', review: '待校對', confirmed: '已核對' };
 
 const HEADERS = [
   '資源分類(最多10位中英文字符)*',
@@ -327,7 +327,7 @@ function fullDialog() {
   showModal({
     title: '儲存量已滿（400 / 400）',
     body: '<p>每部手機最多儲存 <strong>400 條</strong>圖書資料，不能再新增。</p>' +
-      '<p>請先按「匯出 Excel」，把已確認的資料存好，再按「全部清除」開始新一批。</p>',
+      '<p>請先按「匯出 Excel」，把已核對的資料存好，再按「全部清除」開始新一批。</p>',
     actions: [
       { label: '去匯出 Excel', kind: 'primary', onClick: () => { hideModal(); switchView('more'); } },
       { label: '已匯出，立即全部清除', kind: '', onClick: async () => { hideModal(); await clearAllFlow(); } },
@@ -590,6 +590,13 @@ function isbn10Valid(s) { return window.OCRCloud.isbn10Valid(s); }
 function suggestCallLetter(c, l, a) { return window.OCRCloud.suggestCallLetter(c, l, a); }
 function detectLanguage(t, a, all) { return window.OCRCloud.detectLanguage(t, a, all); }
 
+function tidy(s) {
+  return String(s || '')
+    .replace(/\u3000/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 async function aiClassify(fields, text) {
   const ai = settings.ai || {};
   if (!ai.url || !ai.key || !ai.model) return '';
@@ -667,7 +674,7 @@ function bookCard(book) {
   if (book.collection) tags.appendChild(el('span', 'tag cat', book.collection));
   if (book.status === 'draft') tags.appendChild(el('span', 'tag draft', '草稿'));
   if (book.status === 'review') tags.appendChild(el('span', 'tag warn', '待校對'));
-  if (book.status === 'confirmed') tags.appendChild(el('span', 'tag', '已確認'));
+  if (book.status === 'confirmed') tags.appendChild(el('span', 'tag', '已核對'));
   if (isDuplicateBarcode(book)) tags.appendChild(el('span', 'tag warn', 'ISBN 重複'));
   const time = el('span', 'tag', fmtDateShort(book.updatedAt));
   tags.appendChild(time);
@@ -706,7 +713,7 @@ function renderLists() {
   const cl = $('#confirmed-list');
   cl.innerHTML = '';
   if (!confirmed.length) {
-    cl.appendChild(el('div', 'empty', '未有已確認資料。'));
+    cl.appendChild(el('div', 'empty', '未有已核對資料。'));
   } else {
     confirmed.forEach((b) => cl.appendChild(bookCard(b)));
   }
@@ -1124,7 +1131,7 @@ async function exportExcel() {
   if (!confirmed.length) {
     showModal({
       title: '沒有可匯出的資料',
-      body: '<p>只有狀態為「已確認」的圖書會寫入 Excel。請先完成校對。</p>',
+      body: '<p>只有狀態為「已核對」的圖書會寫入 Excel。請先完成校對。</p>',
       actions: [{ label: '知道了', kind: 'primary' }],
     });
     return;
@@ -1399,7 +1406,7 @@ function bindEvents() {
     showModal({
       title: '如何確認一本書',
       body: '<p>打開卡片，核對五項資料：館藏分類、條碼（ISBN）、書名、文字作者、索書號。</p>' +
-        '<p>全部正確後按「已確認」。有錯就改，再按「已確認」。</p>',
+        '<p>全部正確後按「已核對」。有錯就改，再按「已核對」。</p>',
       actions: [{ label: '明白', kind: 'primary' }],
     });
   });
