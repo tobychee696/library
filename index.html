@@ -222,29 +222,41 @@
 
     <label class="field">
       <span>館藏分類 <b class="req">*</b></span>
-      <select id="ed-collection"></select>
+      <div class="field-row">
+        <select id="ed-collection"></select>
+        <button type="button" class="btn small ghost clear-btn" data-clear="#ed-collection">全部刪除</button>
+      </div>
     </label>
 
     <label class="field">
       <span>條碼（ISBN） <b class="req">*</b></span>
-      <input id="ed-barcode" type="text" inputmode="numeric" autocomplete="off" enterkeyhint="done">
+      <div class="field-row">
+        <input id="ed-barcode" type="text" inputmode="numeric" autocomplete="off" enterkeyhint="done">
+        <button type="button" class="btn small ghost clear-btn" data-clear="#ed-barcode">全部刪除</button>
+      </div>
       <small class="hint" id="ed-isbn-hint"></small>
     </label>
 
     <label class="field">
       <span>書名 <b class="req">*</b></span>
-      <input id="ed-title" type="text" autocomplete="off">
+      <div class="field-row">
+        <input id="ed-title" type="text" autocomplete="off">
+        <button type="button" class="btn small ghost clear-btn" data-clear="#ed-title">全部刪除</button>
+      </div>
     </label>
 
     <label class="field">
       <span>文字作者 <b class="req">*</b></span>
-      <input id="ed-author" type="text" autocomplete="off">
+      <div class="field-row">
+        <input id="ed-author" type="text" autocomplete="off">
+        <button type="button" class="btn small ghost clear-btn" data-clear="#ed-author">全部刪除</button>
+      </div>
       <small class="hint">只填文字作者，不填繪者、譯者。</small>
     </label>
 
     <div class="field">
       <span>編號／索書號 <b class="req">*</b></span>
-      <div class="inline-row">
+      <div class="field-row">
         <select id="ed-call">
           <option value="">未設定</option>
           <option value="R">R（宗教書）</option>
@@ -252,14 +264,18 @@
           <option value="C">C（中文）</option>
           <option value="E">E（英文）</option>
         </select>
-        <button class="btn small ghost" id="ed-recall">重新判斷</button>
+        <button type="button" class="btn small ghost" id="ed-recall">重新判斷</button>
+        <button type="button" class="btn small ghost clear-btn" data-clear="#ed-call">全部刪除</button>
       </div>
       <small class="hint" id="ed-call-hint"></small>
     </div>
 
     <label class="field">
       <span>出版社</span>
-      <input id="ed-publisher" type="text" autocomplete="off">
+      <div class="field-row">
+        <input id="ed-publisher" type="text" autocomplete="off">
+        <button type="button" class="btn small ghost clear-btn" data-clear="#ed-publisher">全部刪除</button>
+      </div>
     </label>
 
     <div class="dup-warn hidden" id="ed-dup">此 ISBN 與另一本書重複。</div>

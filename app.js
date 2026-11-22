@@ -912,6 +912,18 @@ function collectEditor() {
   return b;
 }
 
+function clearEditorField(sel) {
+  const node = $(sel);
+  if (!node || !state.editing) return;
+  node.value = '';
+  collectEditor();
+  if (sel === '#ed-title') $('#ed-headline').textContent = '核對資料';
+  if (sel === '#ed-barcode') { updateIsbnHint(); updateDupWarning(); }
+  if (sel === '#ed-collection' || sel === '#ed-call') updateCallHint();
+  scheduleSave();
+  if (node.tagName !== 'SELECT') node.focus();
+}
+
 function scheduleSave() {
   state.editingDirty = true;
   clearTimeout(editorSaveTimer);
@@ -1385,6 +1397,13 @@ function bindEvents() {
       }
       if (sel === '#ed-call') updateCallHint();
       scheduleSave();
+    });
+  });
+
+  $$('.clear-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      clearEditorField(btn.dataset.clear);
     });
   });
 
